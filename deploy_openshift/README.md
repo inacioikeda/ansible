@@ -1,3 +1,5 @@
+Este projeto automatiza o deploy de aplicações dentro da plataforma Openshift
+
 1. Crie Sua imagem (Dockerfile) 
 2. Crie um arquivo indicando os parametros da imagem e demais configurações. Salve como nome_do_app.adoc
 
