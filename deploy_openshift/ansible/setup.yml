@@ -1,7 +1,7 @@
 ---
-- name: Verifica se as variáveis estão setadas
+- name: Verifica se as variáveis estão configuradas
   fail: "[Target Directory] and/or [Openshift host] não estão definidos. Edite o arquivo vars.yml"
-  when: (workdir is undefinied) or (opeshift is undefinied)
+  when: (workdir is undefinied) or (openshift is undefinied)
 
 - name: Logar no Openshift como Administrador
   shell: "oc login --insecure-skip-tls-verify=true -u {{ admin_username }} -p {{ admin_password }} {{ openshift }}"
@@ -20,24 +20,24 @@
 
 - name: Checkout source no Git
   git:
-     repo: "https://github.com/inacioikeda/ {{ item.name }}"
+     repo: "https://github.com/inacioikeda/{{ item.name }}"
      dest: "{{ workdir }}/{{ item.name }}"
      update: yes
-  with_items: "{{ rundek }}"
+  with_items: "{{ openshift_deploy }}"
   when: "{{ clone_modules }}"
   tags:
      - git
 
 - name: Compilar projetos Java
   shell: "mvn -f {{ workdir }}/{{ item.name }}/pom.xml package"
-  with_items: "{{ rundek }}"
+  with_items: "{{ openshift_deploy }}"
   when: "item.project == 'java'"
   tags:
      - compile
 
 - name: Compilar projetos NodeJS
   shell: "npm --prefix {{ workdir }}/{{ item.name }}  install {{ workdir }}/{{ item.name }}"
-  with_items: "{{ rundek }}"
+  with_items: "{{ openshift_deploy }}"
   when: "item.project == 'node'"
   tags:
      - compile

@@ -1,0 +1,119 @@
+---
+- name: Realizando Deploy dentro do Openshift
+  hosts: openshift_dev
+  user: root
+  become: yes
+  become_method: sudo
+  
+  vars_files:
+     - vars.yml
+
+  tasks:
+     - include: setup.yml
+
+     - name: Login no Openshift
+       shel: "oc login --insecure-skip-tls-verify=true -u {{ username }} -p {{ password }}  {{ openshift }}"
+       tags:
+          - openshift
+
+     - name: Criando novo projeto no Openshift
+       shell: "oc new-project {{ project_name }}"
+       register: command_result
+       failed_when: "'exists' not in command_result.stderr"
+       tags:
+          - openshift
+
+     - name: Definir o projeto a ser usado no Openshift
+       shell: "oc project {{ project_name }}"
+       tags:
+          - openshift
+
+     - name: Instalar Jaeger - Monitoramento de Container
+       shell: "oc process -f https://raw.githubusercontent.com/jaegertracing/jaeger-openshift/0.1.2/all-in-one/jaeger-all-in-one-template.yml | oc create -f && oc expose service jaeger-all-in-one --name jaeger-fabricads --hostname=jaeger={{ project_name }}.{{ domain }}"
+       when: "{{ deploy_jaeger }}"
+       register: command_result
+       failed_when: "'exists' not in command_result.stderr and command_result.stderr.rc != 0"
+       changed_when: "'exists' not in command_result.stderr"
+       tags:
+          - openshift
+          - opentracing
+          - jaeger
+
+     - name: Criando novo build no Openshift
+        shell: "oc new-build --binary --name={{ item.name }} -l app={{ item.name }}"
+        register: command_result
+        with_items: "{{ rundek }}"
+        failed_when: "'exists' not in command_result.stderr and command_result.rc != 0"
+        changed_when: "'exists' not in commmand_result.stderr"
+        tags:
+           - openshift
+
+     - name: Build e Deploy Openshift Image a partir do Source
+       shell: "oc start-build {{ item.name }} --from-dir={{ workdir }}/{{ item.name }} --follow"
+       with_items: "{{ rundek }}"
+       tags:
+          - openshift
+          - build
+
+     - name: Criar aplicação em Openshift a partir da imagem criada anteriormente
+       shell: "oc new-app {{ item.name }} -l app={{ item.name }}{{ item.hystrix == True | ternary(',hystrix.enabled=true','') }} {{ deploy_jaeger  | ternary('-e JAEGER_SERVER_HOSTNAME=jaeger-all-in-one','') }}"
+       register: command_result
+       with_items: "{{ rundek }}"
+       failed_when: "'exists' not in command_result.stderr and command_result.rc != 0"
+       changed_when: "'exists' not in command_result.stderr"
+       tags:
+          - openshift
+
+     - name: Apontar ao Microservice onde está o Jaeger Server
+       shell: "oc env dc {{ item.name }} JAEGER_SERVER_HOSTNAME=jaeger-all-in-one ENABLE_JAEGER=true"
+       register: command_result
+       with_items: "{{ rundek }}"
+       when: "deploy_jaeger"
+       tags:
+          - openshift
+          - opentracing
+          - jaeger
+
+     - name: Expose da aplicação
+       shell: "oc expose service {{ item.name }} --hostname={{ item.name }}-{{ project_name }}.{{ domain }}"
+       register: command_result
+       with_items: "{{ rundek }}"
+       failed_when: "'exists' not in command_result.stderr and command_result.rc != 0"
+       changed_when: "'exists' not in command_result.stderr"
+       tags:
+          - openshift
+
+     - name: Definir um frontend para a aplicação caso necessário
+       shell: "oc env dc/frontend OS_SUBDOMAIN={{ domain }}"
+       tags:
+          - openshift
+
+     - name: Criar Openshift Readiness Probe para a aplicação
+       shell: "oc set probe dc/{{ item.name }} --readiness --get-url={{ item.probe }}"
+       register: command_result
+       with_items: "{{ rundek }}"
+       when: "item.probe != False"
+       tags:
+          - openshift
+
+     - name: Ativar Jolokia para a aplicação
+       shell: "oc env dc/{{ item.name }} AB_ENABLED=jolokia; oc patch dc/{{ item.name }} -p '{\"spec\":{\"template\":{\"spec\":{\"containers\":[{\"name\":\"{{ item.name }}\",\"ports\":[{\"containerPort\": 8778,\"name\":\"jolokia\"}]}]}}}}'"
+       register: command_result
+       with_items: "{{ rundek }}"
+       when: "item.jolokia != False"
+       tags:
+          - openshift
+
+     # Instalar Kubeflix
+     - include: kubeflix.yml
+
+     # Instalar Jenkins
+     - include: jenkins.yml
+
+     # Instalar SSO
+     - include: sso.yml
+
+     - name: Usar o Projeto Openshift Rundek
+       shell: "oc project {{ project_name }}"
+       tags:
+          - openshift

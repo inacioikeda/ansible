@@ -1,29 +1,30 @@
 ---
 # DESCOMENTE defini o path absoluto onde você quer fazer check out do código
-workdir: {{ ansible_user_dir }}/rundek-openshift
+workdir: {{ ansible_user_dir }}/rundek
 # DESCOMENTE Defini o host e porta de seu Openshift
 openshift: 192.168.0.13:8443
 # Customização do domínio do projeto
 domain: rundek.192.168.0.13.nip.io
 # Credenciais do Openshift
 username: developer
-password: ikeda
+password: developer
 # Credenciais Administrativas do Openshift
 admin_username: system:admin
 admin_password: "''"
 # Descomente para ajustar SCC (Não use em minishift)
-adjust_scc: true
+adjust_scc: false
 # Definir o nome do projeto dentro do Openshift
 project_name: rundek
-
 # Opcionais
 clone_modules: true
-
-# Define se o deploy teria as capacidade de CI/CD com Jenkins, Hystrix, Jeager ou Keycloack
+# Fazer o deploy de Jenkins, Hystrix, Jeager ou Keycloack?
 deploy_jenkins: false
 deploy_hystrix: false
 deploy_jeager: false
 deploy_keycloack: false
+# Define os projetos para deploy
+# Adicione quantos projetos forem necessários para o deploy
+openshift_deploy:
    - name: rundek
      project: java
      hystrix: false
